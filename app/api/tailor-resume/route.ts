@@ -107,14 +107,27 @@ async function generateResumeWithAI(
   const groqApiKey = process.env.GROQ_API_KEY;
   const openaiApiKey = process.env.OPENAI_API_KEY;
   
+  // Debug logging (without exposing the actual key)
+  console.log('Environment check:', {
+    hasGroqKey: !!groqApiKey,
+    groqKeyLength: groqApiKey ? groqApiKey.length : 0,
+    hasOpenAIKey: !!openaiApiKey,
+  });
+  
   if (!groqApiKey && !openaiApiKey) {
     throw new Error(
       'AI API key not configured. Please set GROQ_API_KEY or OPENAI_API_KEY in your environment variables.\n\n' +
-      'For local development: Add to .env.local file\n' +
+      'For local development: Add to .env.local file (format: GROQ_API_KEY=your_key_here)\n' +
       'For Vercel: Add in Project Settings > Environment Variables\n\n' +
       'Get a free Groq API key at: https://console.groq.com/\n' +
-      'Or use OpenAI API key from: https://platform.openai.com/api-keys'
+      'Or use OpenAI API key from: https://platform.openai.com/api-keys\n\n' +
+      'Note: After adding the key, restart your development server if running locally.'
     );
+  }
+  
+  // Validate API key format
+  if (groqApiKey && groqApiKey.trim().length < 20) {
+    throw new Error('GROQ_API_KEY appears to be invalid (too short). Please check your API key.');
   }
   
   const hasResume = existingResume && existingResume.trim().length > 0;
@@ -186,7 +199,26 @@ async function generateResumeWithAI(
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Groq API error:', response.status, errorText);
-        throw new Error(`Groq API error: ${response.statusText}`);
+        let errorMessage = `Groq API error: ${response.status} ${response.statusText}`;
+        
+        // Provide helpful error messages for common issues
+        if (response.status === 401) {
+          errorMessage = 'Invalid GROQ_API_KEY. Please check your API key in .env.local file.';
+        } else if (response.status === 429) {
+          errorMessage = 'Rate limit exceeded. Please try again in a few moments.';
+        } else if (errorText) {
+          try {
+            const errorData = JSON.parse(errorText);
+            if (errorData.error?.message) {
+              errorMessage = `Groq API error: ${errorData.error.message}`;
+            }
+          } catch {
+            // If parsing fails, use the original error text
+            errorMessage = `Groq API error: ${errorText.substring(0, 200)}`;
+          }
+        }
+        
+        throw new Error(errorMessage);
       }
       
       const data = await response.json();
