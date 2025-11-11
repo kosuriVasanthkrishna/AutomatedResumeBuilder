@@ -104,30 +104,70 @@ async function generateResumeWithAI(
 ): Promise<string> {
   // Check environment variables (works for both local .env.local and Vercel environment variables)
   // Note: Do NOT use NEXT_PUBLIC_ prefix for API keys as they get exposed to client
-  const groqApiKey = process.env.GROQ_API_KEY;
-  const openaiApiKey = process.env.OPENAI_API_KEY;
+  // In Next.js, environment variables are loaded at build/start time, not runtime
+  const groqApiKey = process.env.GROQ_API_KEY?.trim();
+  const openaiApiKey = process.env.OPENAI_API_KEY?.trim();
   
   // Debug logging (without exposing the actual key)
   console.log('Environment check:', {
     hasGroqKey: !!groqApiKey,
     groqKeyLength: groqApiKey ? groqApiKey.length : 0,
+    groqKeyPrefix: groqApiKey ? groqApiKey.substring(0, 4) : 'none',
     hasOpenAIKey: !!openaiApiKey,
+    allEnvKeys: Object.keys(process.env).filter(k => k.includes('GROQ') || k.includes('OPENAI')),
   });
   
   if (!groqApiKey && !openaiApiKey) {
+    // Provide detailed troubleshooting information
+    const troubleshooting = `
+TROUBLESHOOTING STEPS:
+
+1. **Check .env.local file exists:**
+   - File should be in the root directory (same level as package.json)
+   - File name must be exactly: .env.local (not .env or .env.local.txt)
+
+2. **Verify file format:**
+   - Should be: GROQ_API_KEY=your_key_here
+   - No spaces around the = sign
+   - No quotes needed
+   - Key should start with "gsk_" for Groq
+
+3. **RESTART YOUR DEV SERVER:**
+   - Stop the server (Ctrl+C or Cmd+C)
+   - Run: npm run dev
+   - Next.js only loads .env.local on server startup
+
+4. **Check for typos:**
+   - Variable name must be exactly: GROQ_API_KEY
+   - Check for extra spaces or hidden characters
+
+5. **Verify the key:**
+   - Get a new key from: https://console.groq.com/
+   - Make sure you copied the entire key
+
+Current environment check:
+- Has GROQ_API_KEY: ${!!groqApiKey}
+- Has OPENAI_API_KEY: ${!!openaiApiKey}
+- All env vars with GROQ/OPENAI: ${Object.keys(process.env).filter(k => k.includes('GROQ') || k.includes('OPENAI')).join(', ') || 'none found'}
+`;
+    
     throw new Error(
       'AI API key not configured. Please set GROQ_API_KEY or OPENAI_API_KEY in your environment variables.\n\n' +
       'For local development: Add to .env.local file (format: GROQ_API_KEY=your_key_here)\n' +
       'For Vercel: Add in Project Settings > Environment Variables\n\n' +
       'Get a free Groq API key at: https://console.groq.com/\n' +
       'Or use OpenAI API key from: https://platform.openai.com/api-keys\n\n' +
-      'Note: After adding the key, restart your development server if running locally.'
+      troubleshooting
     );
   }
   
   // Validate API key format
-  if (groqApiKey && groqApiKey.trim().length < 20) {
-    throw new Error('GROQ_API_KEY appears to be invalid (too short). Please check your API key.');
+  if (groqApiKey && groqApiKey.length < 20) {
+    throw new Error(`GROQ_API_KEY appears to be invalid (length: ${groqApiKey.length}, expected at least 20). Please check your API key. It should start with "gsk_" for Groq API keys.`);
+  }
+  
+  if (groqApiKey && !groqApiKey.startsWith('gsk_')) {
+    console.warn('Warning: GROQ_API_KEY does not start with "gsk_". This might not be a valid Groq API key.');
   }
   
   const hasResume = existingResume && existingResume.trim().length > 0;
