@@ -10,57 +10,65 @@ interface ResumeUploadProps {
   existingResume: ResumeData | null
 }
 
-export default function ResumeUpload({ onResumeUpload, onResumeDelete, existingResume }: ResumeUploadProps) {
+export default function ResumeUpload({
+  onResumeUpload,
+  onResumeDelete,
+  existingResume,
+}: ResumeUploadProps) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    const file = acceptedFiles[0]
-    if (!file) return
+  const onDrop = useCallback(
+    async (acceptedFiles: File[]) => {
+      const file = acceptedFiles[0]
+      if (!file) return
 
-    setIsProcessing(true)
-    setError(null)
+      setIsProcessing(true)
+      setError(null)
 
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
 
-      const response = await fetch('/api/parse-resume', {
-        method: 'POST',
-        body: formData,
-      })
+        const response = await fetch('/api/parse-resume', {
+          method: 'POST',
+          body: formData,
+        })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to parse file')
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || 'Failed to parse file')
+        }
+
+        const data = await response.json()
+
+        const resumeData: ResumeData = {
+          content: data.content,
+          fileName: data.fileName,
+          fileType: data.fileType,
+          uploadedAt: new Date().toISOString(),
+        }
+
+        onResumeUpload(resumeData)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to process file')
+      } finally {
+        setIsProcessing(false)
       }
-
-      const data = await response.json()
-      
-      const resumeData: ResumeData = {
-        content: data.content,
-        fileName: data.fileName,
-        fileType: data.fileType,
-        uploadedAt: new Date().toISOString(),
-      }
-
-      onResumeUpload(resumeData)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to process file')
-    } finally {
-      setIsProcessing(false)
-    }
-  }, [onResumeUpload])
+    },
+    [onResumeUpload]
+  )
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    // Align accepted types with what the backend actually supports
     accept: {
       'application/pdf': ['.pdf'],
-      'application/msword': ['.doc'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
       'text/plain': ['.txt'],
     },
     maxFiles: 1,
+    disabled: isProcessing,
   })
 
   return (
@@ -70,24 +78,34 @@ export default function ResumeUpload({ onResumeUpload, onResumeDelete, existingR
           <span className="text-2xl animate-bounce">📄</span>
           Resume Upload <span className="text-sm font-normal text-gray-500 dark:text-gray-400">(Optional)</span>
         </h2>
+
+        {/* ESCAPED APOSTROPHES BELOW */}
         <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
-          Upload your resume to tailor it to the job description. If you don't upload a resume, we'll generate a professional one from the job description.
+          Upload your resume to tailor it to the job description. If you don&apos;t upload a resume,
+          we&apos;ll generate a professional one from the job description.
         </p>
+
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 border-2 border-blue-300 dark:border-blue-600 rounded-xl p-4 mb-4 shadow-md hover:shadow-lg transition-shadow">
           <p className="text-xs text-blue-800 dark:text-blue-200 flex items-start gap-2">
             <span className="text-lg animate-pulse">💡</span>
-            <span><span className="font-bold">Format Preservation:</span> If you upload a resume, the tailored version will maintain the same format, structure, borders, lines, and style as your original resume.</span>
+            <span>
+              <span className="font-bold">Format Preservation:</span> If you upload a resume, the
+              tailored version will maintain the same format, structure, borders, lines, and style as
+              your original resume.
+            </span>
           </p>
         </div>
       </div>
-      
+
       {existingResume && (
         <div className="mb-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 border-2 border-green-300 dark:border-green-600 rounded-xl shadow-md animate-slide-in">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1">
               <p className="text-sm text-green-800 dark:text-green-200 flex items-center gap-2">
                 <span className="text-xl">✅</span>
-                <span><span className="font-bold">Saved Resume:</span> {existingResume.fileName}</span>
+                <span>
+                  <span className="font-bold">Saved Resume:</span> {existingResume.fileName}
+                </span>
               </p>
               <p className="text-xs text-green-600 dark:text-green-400 mt-1 ml-7">
                 Uploaded: {new Date(existingResume.uploadedAt).toLocaleDateString()}
@@ -99,7 +117,12 @@ export default function ResumeUpload({ onResumeUpload, onResumeDelete, existingR
               title="Delete saved resume"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
               </svg>
               Delete
             </button>
@@ -111,21 +134,18 @@ export default function ResumeUpload({ onResumeUpload, onResumeDelete, existingR
         {...getRootProps()}
         className={`
           border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all duration-300
-          ${isDragActive 
-            ? 'border-indigo-500 dark:border-indigo-400 bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/50 dark:to-purple-900/50 scale-105 shadow-lg' 
-            : 'border-indigo-300 dark:border-indigo-600 hover:border-indigo-400 dark:hover:border-indigo-500 hover:bg-gradient-to-br hover:from-indigo-50 hover:to-purple-50 dark:hover:from-indigo-900/30 dark:hover:to-purple-900/30 hover:shadow-md'}
+          ${
+            isDragActive
+              ? 'border-indigo-500 dark:border-indigo-400 bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/50 dark:to-purple-900/50 scale-105 shadow-lg'
+              : 'border-indigo-300 dark:border-indigo-600 hover:border-indigo-400 dark:hover:border-indigo-500 hover:bg-gradient-to-br hover:from-indigo-50 hover:to-purple-50 dark:hover:from-indigo-900/30 dark:hover:to-purple-900/30 hover:shadow-md'
+          }
           ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
         `}
       >
-        <input {...getInputProps()} disabled={isProcessing} />
+        <input {...getInputProps()} />
         <div className="space-y-4">
           <div className="mx-auto w-20 h-20 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-full flex items-center justify-center shadow-lg animate-bounce">
-            <svg
-              className="w-10 h-10 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -134,6 +154,7 @@ export default function ResumeUpload({ onResumeUpload, onResumeDelete, existingR
               />
             </svg>
           </div>
+
           {isProcessing ? (
             <div>
               <p className="text-gray-600 dark:text-gray-300 font-medium">Processing resume...</p>
@@ -142,17 +163,16 @@ export default function ResumeUpload({ onResumeUpload, onResumeDelete, existingR
             <>
               <div>
                 <p className="text-gray-700 dark:text-gray-200 font-medium">
-                  {isDragActive
-                    ? 'Drop your resume here'
-                    : 'Drag & drop your resume here, or click to select'}
+                  {isDragActive ? 'Drop your resume here' : 'Drag & drop your resume here, or click to select'}
                 </p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                  Supports PDF, DOC, DOCX, and TXT files
+                  Supported: PDF, DOCX, TXT
                 </p>
                 <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                  Note: Old .doc files may have limited support. For best results, use .docx or PDF format.
+                  Note: Legacy .doc files aren&apos;t supported. Please upload .docx or PDF for best results.
                 </p>
               </div>
+
               {existingResume && (
                 <p className="text-sm text-gray-600 dark:text-gray-400 italic">
                   Upload a new resume to replace the saved one
@@ -171,4 +191,3 @@ export default function ResumeUpload({ onResumeUpload, onResumeDelete, existingR
     </div>
   )
 }
-
