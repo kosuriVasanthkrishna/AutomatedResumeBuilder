@@ -251,7 +251,9 @@ Current environment check:
   const needsProjects = mentionsProjects(jobDescription);
   
   // Build comprehensive prompt
-  let systemPrompt = `You are an expert resume writer and ATS (Applicant Tracking System) specialist. Your task is to create a complete, professional, ATS-friendly resume that perfectly matches the job description.`;
+  let systemPrompt = `You are an expert resume writer and ATS (Applicant Tracking System) specialist with deep knowledge of how real professionals describe their work. Your task is to create a complete, professional, ATS-friendly resume that perfectly matches the job description. 
+
+CRITICAL: Generate ONLY realistic, believable content that sounds authentic. Avoid generic phrases, overly perfect achievements, or anything that sounds fabricated. Think like a real professional would when describing their actual work experience.`;
   
   let userPrompt = `Create a complete, professional, ATS-friendly resume based on the following job description:\n\n${jobDescription}\n\n`;
   
@@ -278,18 +280,74 @@ Current environment check:
     userPrompt += `The user has NOT provided a resume. Generate a complete, realistic resume from scratch based on the job description.\n\n`;
   }
   
-  userPrompt += `\nREQUIREMENTS:\n`;
-  userPrompt += `1. Format: Use clean, ATS-friendly formatting with clear sections and proper headers\n`;
-  userPrompt += `2. Experience Years: ${experienceYears ? `The job requires ${experienceYears}+ years of experience. Create experience entries that show ${experienceYears}+ years of relevant experience.` : 'Create appropriate experience entries based on the job requirements.'}\n`;
-  userPrompt += `3. Projects: ${needsProjects ? 'The job description mentions projects. Include a PROJECTS section with 2-3 realistic, detailed projects that match the job requirements. Include project names, technologies used, and key achievements.' : 'Include projects if relevant to the role.'}\n`;
-  userPrompt += `4. Skills: Extract and include all relevant technical skills, tools, and technologies mentioned in the job description\n`;
-  userPrompt += `5. Quantifiable Achievements: Include specific metrics, percentages, dollar amounts, and impact measurements in experience bullet points\n`;
-  userPrompt += `6. ATS Optimization: Use standard section headers (Professional Summary, Professional Experience, Education, Skills, Projects)\n`;
-  userPrompt += `7. User Details: For personal information not provided, use brackets: [Your Name], [your.email@example.com], [Your Phone Number], [City, State], etc.\n`;
-  userPrompt += `8. Realistic Content: Generate realistic company names, project descriptions, achievements, and experience that align with the job requirements\n`;
-  userPrompt += `9. Professional Language: Use professional, action-oriented language with strong verbs\n`;
-  userPrompt += `10. Complete Resume: Include ALL sections - Header with contact info, Professional Summary, Professional Experience (3-4 positions), Education, Skills, and Projects (if applicable)\n\n`;
-  userPrompt += `Generate the complete tailored resume now. Make it ready to use - the user should only need to fill in their personal details in brackets.`;
+  userPrompt += `\nCRITICAL REQUIREMENTS FOR REALISTIC, AUTHENTIC CONTENT:\n\n`;
+  userPrompt += `1. **REALISTIC COMPANY NAMES & EXPERIENCE:**\n`;
+  userPrompt += `   - Use believable company names (not "Tech Corp" or "ABC Company")\n`;
+  userPrompt += `   - Think of real-sounding companies: mid-size tech firms, consulting companies, startups, established corporations\n`;
+  userPrompt += `   - Company names should vary in style (some with "Solutions", "Systems", "Technologies", or just names)\n`;
+  userPrompt += `   - Dates should be realistic and show career progression (e.g., 2021-2024, 2019-2021, etc.)\n\n`;
+  
+  userPrompt += `2. **AUTHENTIC ACHIEVEMENTS & METRICS:**\n`;
+  userPrompt += `   - Use realistic, believable metrics (not "increased revenue by 1000%" or "saved $10 million")\n`;
+  userPrompt += `   - Typical improvements: 15-35% efficiency gains, 20-40% cost reductions, 10-25% performance improvements\n`;
+  userPrompt += `   - Use specific but believable numbers: "reduced processing time by 28%", "improved user engagement by 22%", "decreased costs by $150K annually"\n`;
+  userPrompt += `   - Include a mix: some with metrics, some describing responsibilities (real resumes aren't 100% metrics)\n`;
+  userPrompt += `   - Avoid round numbers like "50%" or "100%" - use specific numbers like "47%" or "23%"\n\n`;
+  
+  userPrompt += `3. **NATURAL LANGUAGE & DESCRIPTIONS:**\n`;
+  userPrompt += `   - Write like a real professional would describe their work\n`;
+  userPrompt += `   - Use varied action verbs: "Developed", "Implemented", "Collaborated", "Optimized", "Led", "Designed", "Architected"\n`;
+  userPrompt += `   - Include realistic challenges and solutions, not just perfect outcomes\n`;
+  userPrompt += `   - Some bullets should describe responsibilities, not just achievements\n`;
+  userPrompt += `   - Avoid buzzword overload - use technical terms naturally\n`;
+  userPrompt += `   - Make it sound like someone actually did this work, not like marketing copy\n\n`;
+  
+  userPrompt += `4. **REALISTIC PROJECTS (if needed):**\n`;
+  userPrompt += `   - Project names should sound real: "E-commerce Platform Optimization", "Customer Analytics Dashboard", "API Gateway Migration"\n`;
+  userPrompt += `   - Describe actual technical challenges and solutions\n`;
+  userPrompt += `   - Include realistic tech stacks that make sense together\n`;
+  userPrompt += `   - Mention real-world constraints and how they were addressed\n`;
+  userPrompt += `   - Avoid overly ambitious or impossible-sounding projects\n\n`;
+  
+  userPrompt += `5. **CAREER PROGRESSION:**\n`;
+  userPrompt += `   - Show logical career growth: Junior → Mid-level → Senior roles\n`;
+  userPrompt += `   - ${experienceYears ? `Create ${experienceYears}+ years of experience with appropriate progression` : 'Create appropriate experience progression'}\n`;
+  userPrompt += `   - Each role should build on previous experience\n`;
+  userPrompt += `   - Responsibilities should increase with seniority\n`;
+  userPrompt += `   - Include 3-4 positions showing career growth\n\n`;
+  
+  userPrompt += `6. **TECHNICAL DETAILS:**\n`;
+  userPrompt += `   - Use specific technologies mentioned in the job description\n`;
+  userPrompt += `   - Include realistic tech combinations (e.g., React + Node.js + PostgreSQL, not random mixes)\n`;
+  userPrompt += `   - Mention tools and frameworks that professionals actually use\n`;
+  userPrompt += `   - Show depth in key technologies, not just a list of everything\n\n`;
+  
+  userPrompt += `7. **FORMATTING & STRUCTURE:**\n`;
+  userPrompt += `   - Use standard ATS-friendly section headers: Professional Summary, Professional Experience, Education, Skills, Projects\n`;
+  userPrompt += `   - Professional Summary: 3-4 sentences, specific to the role, not generic\n`;
+  userPrompt += `   - Each experience entry: Company name, location, dates, 4-6 bullet points\n`;
+  userPrompt += `   - Education: Realistic degrees and institutions\n`;
+  userPrompt += `   - Skills: Organized by category (Programming Languages, Frameworks, Tools, etc.)\n\n`;
+  
+  userPrompt += `8. **AUTHENTICITY CHECKLIST:**\n`;
+  userPrompt += `   - Would a real person write this? (Yes/No)\n`;
+  userPrompt += `   - Does this sound like actual work experience? (Yes/No)\n`;
+  userPrompt += `   - Are the achievements believable? (Yes/No)\n`;
+  userPrompt += `   - Would a recruiter believe this? (Yes/No)\n`;
+  userPrompt += `   - If any answer is No, rewrite to be more realistic\n\n`;
+  
+  userPrompt += `9. **PERSONAL INFORMATION:**\n`;
+  userPrompt += `   - Use brackets for user details: [Your Name], [your.email@example.com], [Your Phone Number], [City, State]\n`;
+  userPrompt += `   - Keep all other content complete and realistic\n\n`;
+  
+  userPrompt += `10. **FINAL INSTRUCTIONS:**\n`;
+  userPrompt += `    - Generate a complete resume that reads like a real professional's actual experience\n`;
+  userPrompt += `    - Every line should sound authentic and believable\n`;
+  userPrompt += `    - Avoid anything that sounds like AI-generated content or marketing speak\n`;
+  userPrompt += `    - Make it so realistic that if someone reads it, they'll think "this person has real experience"\n`;
+  userPrompt += `    - Think critically about each bullet point: "Would I actually say this about my work?"\n\n`;
+  
+  userPrompt += `Generate the complete, authentic, realistic resume now. Make it believable and professional.`;
   
   // Try Groq first (primary), then OpenAI as fallback
   if (groqApiKey) {
@@ -306,8 +364,8 @@ Current environment check:
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt }
           ],
-          temperature: 0.7,
-          max_tokens: 3000,
+          temperature: 0.8, // Slightly higher for more natural, varied output
+          max_tokens: 4000, // Increased for more detailed, realistic content
         }),
       });
       
@@ -365,8 +423,8 @@ Current environment check:
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
-        temperature: 0.7,
-        max_tokens: 3000,
+        temperature: 0.8, // Slightly higher for more natural, varied output
+        max_tokens: 4000, // Increased for more detailed, realistic content
       });
       
       const content = completion.choices[0]?.message?.content || '';
