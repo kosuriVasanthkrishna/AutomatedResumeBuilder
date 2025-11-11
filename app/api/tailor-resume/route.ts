@@ -97,13 +97,25 @@ function extractResumeInfo(resumeText: string): {
   return info;
 }
 
-// Generate AI-powered resume using OpenAI or Groq
+// Generate AI-powered resume using Groq (primary) or OpenAI (fallback)
 async function generateResumeWithAI(
   jobDescription: string,
   existingResume?: string
 ): Promise<string> {
+  // Check environment variables (works for both local .env.local and Vercel environment variables)
+  // Note: Do NOT use NEXT_PUBLIC_ prefix for API keys as they get exposed to client
   const groqApiKey = process.env.GROQ_API_KEY;
   const openaiApiKey = process.env.OPENAI_API_KEY;
+  
+  if (!groqApiKey && !openaiApiKey) {
+    throw new Error(
+      'AI API key not configured. Please set GROQ_API_KEY or OPENAI_API_KEY in your environment variables.\n\n' +
+      'For local development: Add to .env.local file\n' +
+      'For Vercel: Add in Project Settings > Environment Variables\n\n' +
+      'Get a free Groq API key at: https://console.groq.com/\n' +
+      'Or use OpenAI API key from: https://platform.openai.com/api-keys'
+    );
+  }
   
   const hasResume = existingResume && existingResume.trim().length > 0;
   const resumeInfo = hasResume ? extractResumeInfo(existingResume) : {};
@@ -116,7 +128,8 @@ async function generateResumeWithAI(
   let userPrompt = `Create a complete, professional, ATS-friendly resume based on the following job description:\n\n${jobDescription}\n\n`;
   
   if (hasResume) {
-    userPrompt += `IMPORTANT: The user has provided their existing resume. Extract and use the following information from it:\n`;
+    userPrompt += `IMPORTANT: The user has provided their existing resume. You MUST tailor and improve it to match the job description. Here's the existing resume content:\n\n${existingResume}\n\n`;
+    userPrompt += `Extract and use the following information from the existing resume:\n`;
     userPrompt += `- Name: ${resumeInfo.name || '[Not found - use [Your Name]]'}\n`;
     userPrompt += `- Email: ${resumeInfo.email || '[Not found - use [your.email@example.com]]'}\n`;
     userPrompt += `- Phone: ${resumeInfo.phone || '[Not found - use [Your Phone Number]]'}\n`;
@@ -126,8 +139,13 @@ async function generateResumeWithAI(
     if (resumeInfo.projects && resumeInfo.projects.length > 0) {
       userPrompt += `- Projects: ${resumeInfo.projects.join('; ')}\n`;
     }
-    userPrompt += `\nUse the real information from the resume where available. For missing details, use brackets like [Your Name], [your.email@example.com], etc.\n\n`;
-    userPrompt += `Tailor the existing resume to match the job description while preserving the user's actual experience and achievements.`;
+    userPrompt += `\nCRITICAL: Do NOT just return the original resume. You MUST:\n`;
+    userPrompt += `1. Tailor all experience bullet points to match keywords and requirements from the job description\n`;
+    userPrompt += `2. Reorder sections to highlight most relevant experience first\n`;
+    userPrompt += `3. Add missing skills mentioned in the job description\n`;
+    userPrompt += `4. Rewrite the professional summary to align with the job requirements\n`;
+    userPrompt += `5. Enhance achievements with quantifiable metrics where possible\n`;
+    userPrompt += `6. Use the real information from the resume where available. For missing details, use brackets like [Your Name], [your.email@example.com], etc.\n\n`;
   } else {
     userPrompt += `The user has NOT provided a resume. Generate a complete, realistic resume from scratch based on the job description.\n\n`;
   }
@@ -143,30 +161,9 @@ async function generateResumeWithAI(
   userPrompt += `8. Realistic Content: Generate realistic company names, project descriptions, achievements, and experience that align with the job requirements\n`;
   userPrompt += `9. Professional Language: Use professional, action-oriented language with strong verbs\n`;
   userPrompt += `10. Complete Resume: Include ALL sections - Header with contact info, Professional Summary, Professional Experience (3-4 positions), Education, Skills, and Projects (if applicable)\n\n`;
-  userPrompt += `Generate the complete resume now. Make it ready to use - the user should only need to fill in their personal details in brackets.`;
+  userPrompt += `Generate the complete tailored resume now. Make it ready to use - the user should only need to fill in their personal details in brackets.`;
   
-  // Try OpenAI first, then Groq
-  if (openaiApiKey) {
-    try {
-      const openai = new OpenAI({ apiKey: openaiApiKey });
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini", // Using cost-effective model
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        temperature: 0.7,
-        max_tokens: 3000,
-      });
-      
-      return completion.choices[0]?.message?.content || '';
-    } catch (error) {
-      console.error('OpenAI error:', error);
-      // Fall through to Groq
-    }
-  }
-  
-  // Try Groq as fallback
+  // Try Groq first (primary), then OpenAI as fallback
   if (groqApiKey) {
     try {
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -187,23 +184,58 @@ async function generateResumeWithAI(
       });
       
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Groq API error:', response.status, errorText);
         throw new Error(`Groq API error: ${response.statusText}`);
       }
       
       const data = await response.json();
-      return data.choices[0]?.message?.content || '';
-    } catch (error) {
+      const content = data.choices[0]?.message?.content || '';
+      
+      if (!content || content.trim().length === 0) {
+        throw new Error('Empty response from Groq API');
+      }
+      
+      return content;
+    } catch (error: any) {
       console.error('Groq error:', error);
-      throw new Error('Failed to generate resume with AI. Please check your API keys.');
+      // If Groq fails and OpenAI is available, try OpenAI
+      if (openaiApiKey) {
+        console.log('Falling back to OpenAI...');
+      } else {
+        throw new Error(`Failed to generate resume with Groq: ${error.message || 'Unknown error'}. Please check your GROQ_API_KEY.`);
+      }
     }
   }
   
-  // If no API keys, provide helpful error message
-  throw new Error(
-    'AI API key not configured. Please set OPENAI_API_KEY or GROQ_API_KEY in your .env.local file.\n\n' +
-    'Get a free Groq API key at: https://console.groq.com/\n' +
-    'Or use OpenAI API key from: https://platform.openai.com/api-keys'
-  );
+  // Try OpenAI as fallback
+  if (openaiApiKey) {
+    try {
+      const openai = new OpenAI({ apiKey: openaiApiKey });
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 3000,
+      });
+      
+      const content = completion.choices[0]?.message?.content || '';
+      
+      if (!content || content.trim().length === 0) {
+        throw new Error('Empty response from OpenAI API');
+      }
+      
+      return content;
+    } catch (error: any) {
+      console.error('OpenAI error:', error);
+      throw new Error(`Failed to generate resume with OpenAI: ${error.message || 'Unknown error'}. Please check your API keys.`);
+    }
+  }
+  
+  throw new Error('No AI API key available. Please configure GROQ_API_KEY or OPENAI_API_KEY.');
 }
 
 export async function POST(req: NextRequest) {

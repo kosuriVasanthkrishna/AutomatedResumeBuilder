@@ -95,6 +95,23 @@ npm run dev
 - `GROQ_API_KEY`: Your Groq API key (required, free at https://console.groq.com/)
 - `OPENAI_API_KEY`: (Optional) Fallback if GROQ_API_KEY is not set
 
+### For Local Development
+Create a `.env.local` file in the root directory:
+```env
+GROQ_API_KEY=your_groq_api_key_here
+```
+
+### For Vercel Deployment
+1. Go to your Vercel project dashboard
+2. Navigate to **Settings** > **Environment Variables**
+3. Add a new environment variable:
+   - **Name**: `GROQ_API_KEY`
+   - **Value**: Your Groq API key
+   - **Environment**: Production, Preview, and Development (select all)
+4. Redeploy your application
+
+**Important**: Never commit your `.env.local` file to Git. It's already in `.gitignore`.
+
 ## Notes
 
 - The resume is stored in browser localStorage, so it persists across sessions
