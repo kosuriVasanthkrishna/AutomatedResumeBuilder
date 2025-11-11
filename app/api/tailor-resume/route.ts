@@ -152,9 +152,49 @@ async function generateResumeWithAI(
   });
   
   if (!groqApiKey && !openaiApiKey) {
+    // Detect if we're on Vercel
+    const isVercel = !!process.env.VERCEL;
+    const isProduction = process.env.NODE_ENV === 'production';
+    
     // Provide detailed troubleshooting information
-    const troubleshooting = `
-TROUBLESHOOTING STEPS:
+    const troubleshooting = isVercel ? `
+VERCEL DEPLOYMENT TROUBLESHOOTING:
+
+1. **Add Environment Variable in Vercel:**
+   - Go to: https://vercel.com/dashboard
+   - Select your project
+   - Go to Settings > Environment Variables
+   - Click "Add New"
+   - Name: GROQ_API_KEY
+   - Value: Your Groq API key (starts with gsk_)
+   - IMPORTANT: Select ALL environments (Production, Preview, Development)
+   - Click "Save"
+
+2. **Redeploy After Adding:**
+   - Go to Deployments tab
+   - Click the three dots (⋯) on latest deployment
+   - Click "Redeploy"
+   - OR push a new commit to trigger redeploy
+
+3. **Verify Environment Variable:**
+   - Check that GROQ_API_KEY is listed in Environment Variables
+   - Make sure it's enabled for Production environment
+   - The value should start with "gsk_"
+
+4. **Check Deployment Logs:**
+   - Go to your deployment in Vercel
+   - Check the "Logs" tab for any errors
+   - Look for environment variable loading messages
+
+Current environment check:
+- Running on Vercel: ${isVercel}
+- Environment: ${process.env.NODE_ENV || 'unknown'}
+- Has GROQ_API_KEY: ${!!groqApiKey}
+- Has OPENAI_API_KEY: ${!!openaiApiKey}
+- All env vars with GROQ/OPENAI: ${Object.keys(process.env).filter(k => k.includes('GROQ') || k.includes('OPENAI')).join(', ') || 'none found'}
+- Vercel env vars: ${Object.keys(process.env).filter(k => k.startsWith('VERCEL')).join(', ') || 'none'}
+` : `
+LOCAL DEVELOPMENT TROUBLESHOOTING:
 
 1. **Check .env.local file exists:**
    - File should be in the root directory (same level as package.json)
@@ -187,8 +227,9 @@ Current environment check:
     
     throw new Error(
       'AI API key not configured. Please set GROQ_API_KEY or OPENAI_API_KEY in your environment variables.\n\n' +
-      'For local development: Add to .env.local file (format: GROQ_API_KEY=your_key_here)\n' +
-      'For Vercel: Add in Project Settings > Environment Variables\n\n' +
+      (isVercel 
+        ? 'For Vercel: Go to Project Settings > Environment Variables > Add GROQ_API_KEY > Redeploy\n'
+        : 'For local development: Add to .env.local file (format: GROQ_API_KEY=your_key_here)\n') +
       'Get a free Groq API key at: https://console.groq.com/\n' +
       'Or use OpenAI API key from: https://platform.openai.com/api-keys\n\n' +
       troubleshooting
