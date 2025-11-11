@@ -1,8 +1,42 @@
 // app/api/tailor-resume/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
+import { readFileSync } from "fs";
+import { join } from "path";
 
 export const runtime = "nodejs";
+
+// Helper function to load .env.local manually if Next.js didn't load it
+function loadEnvLocal() {
+  try {
+    const envPath = join(process.cwd(), '.env.local');
+    const envContent = readFileSync(envPath, 'utf-8');
+    const lines = envContent.split('\n');
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith('#')) {
+        const [key, ...valueParts] = trimmed.split('=');
+        if (key && valueParts.length > 0) {
+          const value = valueParts.join('=').trim();
+          // Only set if not already in process.env
+          if (!process.env[key]) {
+            process.env[key] = value;
+          }
+        }
+      }
+    }
+    console.log('Manually loaded .env.local file');
+  } catch (error) {
+    // File doesn't exist or can't be read - that's okay, Next.js should handle it
+    console.log('Could not manually load .env.local (this is normal if Next.js already loaded it)');
+  }
+}
+
+// Try to load .env.local if env vars are missing
+if (!process.env.GROQ_API_KEY && !process.env.OPENAI_API_KEY) {
+  loadEnvLocal();
+}
 
 // Helper function to extract years of experience requirement from JD
 function extractExperienceYears(jd: string): number | null {
