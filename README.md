@@ -117,8 +117,8 @@ GROQ_API_KEY=your_groq_api_key_here
 - The resume is stored in browser localStorage, so it persists across sessions
 - For production, consider implementing server-side storage and user authentication
 - **Groq is completely FREE** - No credit card required, generous rate limits, and fast inference
-- The current implementation uses Llama 3.1 70B (free). You can modify the model in `app/api/tailor-resume/route.ts`
-- Alternative free models available: `llama-3.1-8b-instant`, `mixtral-8x7b-32768`
+- The current implementation uses Llama 3.3 70B Versatile (free). You can modify the model in `app/api/tailor-resume/route.ts`
+- Alternative free models available: `llama-3.1-8b-instant`, `mixtral-8x7b-32768`, `llama-3.3-70b-versatile`
 - PDF parsing uses server-side parsing for better reliability
 
 ## License
