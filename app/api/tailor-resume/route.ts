@@ -7,18 +7,21 @@ export async function POST(req: NextRequest) {
   try {
     const { resumeText, jobDescription } = await req.json();
 
-    if (!resumeText || !jobDescription) {
+    if (!jobDescription || !jobDescription.trim()) {
       return NextResponse.json(
-        { error: "Missing resumeText or jobDescription" },
+        { error: "Missing jobDescription" },
         { status: 400 }
       );
     }
 
-    // Simple deterministic “tailoring” stub (no external API).
+    // Simple deterministic "tailoring" stub (no external API).
     // You can later replace this block with calls to Gemini/Groq/OpenAI etc.
+    const resumeContent = resumeText?.trim() || '';
     const tailored =
       `TARGET ROLE SUMMARY:\n${jobDescription.trim()}\n\n` +
-      `TAILORED RESUME DRAFT:\n${resumeText.trim()}\n\n` +
+      (resumeContent 
+        ? `TAILORED RESUME DRAFT:\n${resumeContent}\n\n` 
+        : `GENERATED RESUME DRAFT:\n[Resume will be generated based on job description]\n\n`) +
       `ADAPTATION NOTES:\n` +
       `- Align bullets to job keywords.\n` +
       `- Quantify impact (%, $, time saved).\n` +

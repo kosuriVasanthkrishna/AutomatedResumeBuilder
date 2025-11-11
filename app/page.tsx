@@ -62,7 +62,7 @@ export default function Home() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          resume: resumeData?.content || null,
+          resumeText: resumeData?.content || '',
           jobDescription: jobDescription,
         }),
       })
@@ -73,7 +73,7 @@ export default function Home() {
       }
 
       const data = await response.json()
-      setTailoredResume(data.tailoredResume)
+      setTailoredResume(data.tailored)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
