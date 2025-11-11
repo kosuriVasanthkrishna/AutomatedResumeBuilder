@@ -1,89 +1,209 @@
 // app/api/tailor-resume/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import OpenAI from "openai";
 
 export const runtime = "nodejs";
 
-// Helper function to extract keywords/skills from job description
-function extractKeywords(text: string): string[] {
-  const commonTechSkills = [
-    'JavaScript', 'TypeScript', 'Python', 'Java', 'C++', 'React', 'Node.js',
-    'SQL', 'MongoDB', 'AWS', 'Docker', 'Kubernetes', 'Git', 'Agile', 'Scrum',
-    'Machine Learning', 'AI', 'Data Science', 'Cloud Computing', 'DevOps',
-    'HTML', 'CSS', 'Angular', 'Vue', 'Express', 'REST API', 'GraphQL',
-    'PostgreSQL', 'MySQL', 'Redis', 'Linux', 'CI/CD', 'Microservices'
+// Helper function to extract years of experience requirement from JD
+function extractExperienceYears(jd: string): number | null {
+  const patterns = [
+    /(\d+)\+?\s*years?\s*(?:of\s*)?experience/gi,
+    /(\d+)\+?\s*years?\s*(?:in|with)/gi,
+    /minimum\s*(?:of\s*)?(\d+)\s*years?/gi,
+    /at\s*least\s*(\d+)\s*years?/gi,
   ];
-  
-  const keywords: string[] = [];
-  const lowerText = text.toLowerCase();
-  
-  // Check for common tech skills
-  for (const skill of commonTechSkills) {
-    if (lowerText.includes(skill.toLowerCase())) {
-      keywords.push(skill);
+
+  for (const pattern of patterns) {
+    const matches = jd.match(pattern);
+    if (matches) {
+      const years = matches.map(m => {
+        const numMatch = m.match(/(\d+)/);
+        return numMatch ? parseInt(numMatch[1], 10) : 0;
+      });
+      return Math.max(...years);
     }
   }
-  
-  // Extract words that look like skills (capitalized, 2-20 chars, not common words)
-  const words = text.match(/\b[A-Z][a-z]{2,20}\b/g) || [];
-  const commonWords = ['The', 'This', 'That', 'With', 'From', 'Your', 'Will', 'Should', 'Must', 'Have', 'Are', 'Can', 'May'];
-  const uniqueWords = Array.from(new Set(words.filter(w => !commonWords.includes(w))));
-  
-  // Add unique capitalized words that might be skills
-  uniqueWords.slice(0, 10).forEach(word => {
-    if (!keywords.includes(word) && word.length > 2) {
-      keywords.push(word);
-    }
-  });
-  
-  return keywords.slice(0, 15);
+  return null;
 }
 
-// Helper function to generate qualifications from job description
-function generateQualifications(jd: string): string {
-  const lines = jd.split('\n').filter((l: string) => l.trim());
-  const qualifications: string[] = [];
+// Helper function to check if JD mentions projects
+function mentionsProjects(jd: string): boolean {
+  const lowerJd = jd.toLowerCase();
+  return lowerJd.includes('project') || lowerJd.includes('portfolio') || 
+         lowerJd.includes('github') || lowerJd.includes('code sample');
+}
+
+// Helper function to extract information from user's resume
+function extractResumeInfo(resumeText: string): {
+  name?: string;
+  email?: string;
+  phone?: string;
+  experience?: string[];
+  projects?: string[];
+  skills?: string[];
+  education?: string[];
+} {
+  const info: any = {};
+  const lines = resumeText.split('\n').map(l => l.trim()).filter(l => l);
   
-  // Look for requirements/qualifications section
-  let inRequirementsSection = false;
+  // Extract contact info
+  const emailMatch = resumeText.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/);
+  if (emailMatch) info.email = emailMatch[0];
+  
+  const phoneMatch = resumeText.match(/(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
+  if (phoneMatch) info.phone = phoneMatch[0];
+  
+  // Extract name (usually first line or before email)
+  if (lines.length > 0 && !lines[0].includes('@') && !lines[0].match(/\d{3}/)) {
+    info.name = lines[0].split(/\s+/).slice(0, 2).join(' ');
+  }
+  
+  // Extract experience sections
+  let inExperience = false;
+  const experience: string[] = [];
   for (const line of lines) {
-    const lowerLine = line.toLowerCase();
-    if (lowerLine.includes('requirement') || lowerLine.includes('qualification') || 
-        lowerLine.includes('must have') || lowerLine.includes('should have')) {
-      inRequirementsSection = true;
+    const lower = line.toLowerCase();
+    if (lower.includes('experience') || lower.includes('employment') || lower.includes('work history')) {
+      inExperience = true;
       continue;
     }
-    
-    if (inRequirementsSection) {
-      // Stop if we hit a new section
-      if (lowerLine.includes('responsibilit') || lowerLine.includes('benefit') || 
-          lowerLine.includes('about') || lowerLine.includes('company')) {
-        break;
-      }
+    if (inExperience && (lower.includes('education') || lower.includes('skill') || lower.includes('project'))) {
+      break;
+    }
+    if (inExperience && line.length > 20) {
+      experience.push(line);
+    }
+  }
+  info.experience = experience.slice(0, 10);
+  
+  // Extract projects
+  let inProjects = false;
+  const projects: string[] = [];
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    if (lower.includes('project')) {
+      inProjects = true;
+      continue;
+    }
+    if (inProjects && (lower.includes('education') || lower.includes('skill') || lower.includes('experience'))) {
+      break;
+    }
+    if (inProjects && line.length > 15) {
+      projects.push(line);
+    }
+  }
+  info.projects = projects.slice(0, 5);
+  
+  return info;
+}
+
+// Generate AI-powered resume using OpenAI or Groq
+async function generateResumeWithAI(
+  jobDescription: string,
+  existingResume?: string
+): Promise<string> {
+  const groqApiKey = process.env.GROQ_API_KEY;
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  
+  const hasResume = existingResume && existingResume.trim().length > 0;
+  const resumeInfo = hasResume ? extractResumeInfo(existingResume) : {};
+  const experienceYears = extractExperienceYears(jobDescription);
+  const needsProjects = mentionsProjects(jobDescription);
+  
+  // Build comprehensive prompt
+  let systemPrompt = `You are an expert resume writer and ATS (Applicant Tracking System) specialist. Your task is to create a complete, professional, ATS-friendly resume that perfectly matches the job description.`;
+  
+  let userPrompt = `Create a complete, professional, ATS-friendly resume based on the following job description:\n\n${jobDescription}\n\n`;
+  
+  if (hasResume) {
+    userPrompt += `IMPORTANT: The user has provided their existing resume. Extract and use the following information from it:\n`;
+    userPrompt += `- Name: ${resumeInfo.name || '[Not found - use [Your Name]]'}\n`;
+    userPrompt += `- Email: ${resumeInfo.email || '[Not found - use [your.email@example.com]]'}\n`;
+    userPrompt += `- Phone: ${resumeInfo.phone || '[Not found - use [Your Phone Number]]'}\n`;
+    if (resumeInfo.experience && resumeInfo.experience.length > 0) {
+      userPrompt += `- Previous Experience: ${resumeInfo.experience.join('; ')}\n`;
+    }
+    if (resumeInfo.projects && resumeInfo.projects.length > 0) {
+      userPrompt += `- Projects: ${resumeInfo.projects.join('; ')}\n`;
+    }
+    userPrompt += `\nUse the real information from the resume where available. For missing details, use brackets like [Your Name], [your.email@example.com], etc.\n\n`;
+    userPrompt += `Tailor the existing resume to match the job description while preserving the user's actual experience and achievements.`;
+  } else {
+    userPrompt += `The user has NOT provided a resume. Generate a complete, realistic resume from scratch based on the job description.\n\n`;
+  }
+  
+  userPrompt += `\nREQUIREMENTS:\n`;
+  userPrompt += `1. Format: Use clean, ATS-friendly formatting with clear sections and proper headers\n`;
+  userPrompt += `2. Experience Years: ${experienceYears ? `The job requires ${experienceYears}+ years of experience. Create experience entries that show ${experienceYears}+ years of relevant experience.` : 'Create appropriate experience entries based on the job requirements.'}\n`;
+  userPrompt += `3. Projects: ${needsProjects ? 'The job description mentions projects. Include a PROJECTS section with 2-3 realistic, detailed projects that match the job requirements. Include project names, technologies used, and key achievements.' : 'Include projects if relevant to the role.'}\n`;
+  userPrompt += `4. Skills: Extract and include all relevant technical skills, tools, and technologies mentioned in the job description\n`;
+  userPrompt += `5. Quantifiable Achievements: Include specific metrics, percentages, dollar amounts, and impact measurements in experience bullet points\n`;
+  userPrompt += `6. ATS Optimization: Use standard section headers (Professional Summary, Professional Experience, Education, Skills, Projects)\n`;
+  userPrompt += `7. User Details: For personal information not provided, use brackets: [Your Name], [your.email@example.com], [Your Phone Number], [City, State], etc.\n`;
+  userPrompt += `8. Realistic Content: Generate realistic company names, project descriptions, achievements, and experience that align with the job requirements\n`;
+  userPrompt += `9. Professional Language: Use professional, action-oriented language with strong verbs\n`;
+  userPrompt += `10. Complete Resume: Include ALL sections - Header with contact info, Professional Summary, Professional Experience (3-4 positions), Education, Skills, and Projects (if applicable)\n\n`;
+  userPrompt += `Generate the complete resume now. Make it ready to use - the user should only need to fill in their personal details in brackets.`;
+  
+  // Try OpenAI first, then Groq
+  if (openaiApiKey) {
+    try {
+      const openai = new OpenAI({ apiKey: openaiApiKey });
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini", // Using cost-effective model
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 3000,
+      });
       
-      // Extract bullet points or numbered items
-      const trimmed = line.trim();
-      if (trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*') ||
-          /^\d+[\.\)]/.test(trimmed)) {
-        const clean = trimmed.replace(/^[•\-\*\d\.\)\s]+/, '').trim();
-        if (clean.length > 10 && clean.length < 150) {
-          qualifications.push(clean);
-        }
-      }
-      
-      if (qualifications.length >= 5) break;
+      return completion.choices[0]?.message?.content || '';
+    } catch (error) {
+      console.error('OpenAI error:', error);
+      // Fall through to Groq
     }
   }
   
-  // If no structured requirements found, create generic ones
-  if (qualifications.length === 0) {
-    return `• Strong problem-solving and analytical skills
-• Excellent communication and teamwork abilities
-• Proven track record of delivering results
-• Adaptable and quick learner
-• Detail-oriented with strong organizational skills`;
+  // Try Groq as fallback
+  if (groqApiKey) {
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${groqApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.1-70b-versatile',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 3000,
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Groq API error: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      return data.choices[0]?.message?.content || '';
+    } catch (error) {
+      console.error('Groq error:', error);
+      throw new Error('Failed to generate resume with AI. Please check your API keys.');
+    }
   }
   
-  return qualifications.map(q => `• ${q}`).join('\n');
+  // If no API keys, provide helpful error message
+  throw new Error(
+    'AI API key not configured. Please set OPENAI_API_KEY or GROQ_API_KEY in your .env.local file.\n\n' +
+    'Get a free Groq API key at: https://console.groq.com/\n' +
+    'Or use OpenAI API key from: https://platform.openai.com/api-keys'
+  );
 }
 
 export async function POST(req: NextRequest) {
@@ -100,72 +220,24 @@ export async function POST(req: NextRequest) {
     const resumeContent = (resumeText || '').trim();
     const jd = jobDescription.trim();
     
-    let tailored = '';
-    
     // Check if we have actual resume content (not empty and not the same as job description)
     const hasResume = resumeContent && resumeContent.length > 0 && resumeContent !== jd;
     
-    if (hasResume) {
-      // If resume exists, return it (in future, this would be AI-tailored)
-      tailored = resumeContent;
-    } else {
-      // Generate a resume template from job description
-      // Extract job title and key requirements
-      const lines = jd.split('\n').filter((l: string) => l.trim());
-      const firstLine = lines[0] || '';
-      
-      // Try to extract job title (common patterns)
-      let jobTitle = 'Professional';
-      if (firstLine.length > 0 && firstLine.length < 100) {
-        // Check if first line looks like a job title
-        if (!firstLine.toLowerCase().includes('description') && 
-            !firstLine.toLowerCase().includes('requirements') &&
-            !firstLine.toLowerCase().includes('responsibilities')) {
-          jobTitle = firstLine;
-        }
-      }
-      
-      // Extract skills/keywords from job description
-      const skillsKeywords = extractKeywords(jd);
-      
-      // Generate professional resume template
-      tailored = `PROFESSIONAL RESUME
+    // Generate AI-powered resume
+    const tailored = await generateResumeWithAI(jd, hasResume ? resumeContent : undefined);
 
-${jobTitle.toUpperCase()}
-
-PROFESSIONAL SUMMARY
-Experienced professional seeking ${jobTitle} position. ${skillsKeywords.length > 0 ? `Proficient in ${skillsKeywords.slice(0, 3).join(', ')}.` : 'Ready to contribute to your team.'}
-
-KEY QUALIFICATIONS
-${generateQualifications(jd)}
-
-PROFESSIONAL EXPERIENCE
-
-[Your Most Recent Position Title]
-[Company Name] | [Location] | [Date Range]
-• [Quantify your achievements - e.g., "Increased efficiency by 25%"]
-• [Use keywords from the job description]
-• [Highlight relevant accomplishments]
-
-[Previous Position Title]
-[Company Name] | [Location] | [Date Range]
-• [Relevant achievement]
-• [Another achievement]
-• [Impact-focused bullet point]
-
-EDUCATION
-[Your Degree] | [Institution Name] | [Year]
-${skillsKeywords.length > 0 ? `\nTECHNICAL SKILLS\n${skillsKeywords.slice(0, 10).map(s => `• ${s}`).join('\n')}` : ''}
-
----
-Note: This resume template was generated from the job description. Please replace all placeholders with your actual information, experience, and achievements.`;
+    if (!tailored || tailored.trim().length === 0) {
+      return NextResponse.json(
+        { error: "Failed to generate resume. Please try again." },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ ok: true, tailored });
   } catch (err: any) {
     console.error("tailor-resume error:", err);
     return NextResponse.json(
-      { error: err?.message ?? "Unknown error" },
+      { error: err?.message ?? "Unknown error occurred while generating resume" },
       { status: 500 }
     );
   }
